@@ -140,6 +140,19 @@
           <release>21</release>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>com.google.cloud.tools</groupId>
+        <artifactId>jib-maven-plugin</artifactId>
+        <version>LATEST_JIB_VERSION</version> <!-- Use the latest version from Maven Central -->
+        <configuration>
+          <from>
+            <image>eclipse-temurin:21-jre</image> <!-- Specify a Java 21 compatible base image -->
+          </from>
+          <to>
+            <image>your-registry-url/your-app-image-name:tag</image>
+          </to>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>
