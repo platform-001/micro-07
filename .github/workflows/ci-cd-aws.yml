@@ -157,7 +157,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY }}
-          AWS_REGION: ${{ inputs.aws_region || vars.AWS_REGION }}
+          aws-region: ${{ inputs.aws_region || vars.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr
@@ -205,7 +205,7 @@ jobs:
 
       - name: Update App Runner service
         env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_REGION:  ${{ inputs.aws_region || vars.AWS_REGION }}
           SERVICE_ARN: ${{ steps.pick.outputs.service_arn }}
           IMAGE_URI: ${{ steps.meta.outputs.image_uri }}
         run: |
@@ -217,7 +217,7 @@ jobs:
       - name: Get runtime URL
         id: runtime
         env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_REGION:  ${{ inputs.aws_region || vars.AWS_REGION }}
           SERVICE_ARN: ${{ steps.pick.outputs.service_arn }}
         run: |
           URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --region "$AWS_REGION" --query "Service.ServiceUrl" --output text)
@@ -241,7 +241,7 @@ jobs:
           RUNTIME_URL: ${{ needs.deploy.outputs.runtime_url }}
           DEPLOY_OK: ${{ needs.deploy.outputs.deploy_ok }}
           IMAGE_URI: ${{ needs.deploy.outputs.image_uri }}
-          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_REGION:  ${{ inputs.aws_region || vars.AWS_REGION }}
           COVERAGE: ${{ needs.build_test_scan.outputs.coverage }}
           SECRETS_FOUND: ${{ needs.build_test_scan.outputs.secrets_found }}
           HIGH_VULNS: ${{ needs.build_test_scan.outputs.high_vulns }}
