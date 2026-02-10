@@ -90,13 +90,26 @@ jobs:
           COUNT=$(python count_secrets.py)
           echo "count=$COUNT" >> $GITHUB_OUTPUT
       # SCA (OWASP Dependency-Check)
-      - name: Dependency-Check
+      - name: Cache Dependency-Check DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check
+          key: odc-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            odc-${{ runner.os }}-
+
+      - name: Dependency-Check (SCA) - stable
         id: depcheck
         continue-on-error: true
         run: |
           mvn -B org.owasp:dependency-check-maven:check \
+            -DdataDirectory=$HOME/.dependency-check \
             -Dformat=JSON \
-            -DoutputDirectory=target/dependency-check
+            -DoutputDirectory=target/dependency-check \
+            -DnvdValidForHours=24 \
+            -DfailOnError=false \
+            -Ddependency-check.threadCount=1
+            
       - name: Count HIGH vulns
         id: vulns
         run: |
