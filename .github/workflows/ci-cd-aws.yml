@@ -98,18 +98,18 @@ jobs:
           restore-keys: |
             odc-${{ runner.os }}-
 
-      - name: Dependency-Check (SCA) - stable
-        if: false
+      - name: Dependency-Check
         id: depcheck
         continue-on-error: true
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
+          # El flag -DdataDirectory ayuda a evitar problemas de permisos/rutas temporales
           mvn -B org.owasp:dependency-check-maven:check \
-            -DdataDirectory=$HOME/.dependency-check \
             -Dformat=JSON \
             -DoutputDirectory=target/dependency-check \
-            -DnvdValidForHours=24 \
-            -DfailOnError=false \
-            -Ddependency-check.threadCount=1
+            -DdataDirectory=${{ github.workspace }}/dependency-check-data \
+            -DnvdApiKey=$NVD_API_KEY
             
       - name: Count HIGH vulns
         id: vulns
