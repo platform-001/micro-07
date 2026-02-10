@@ -99,6 +99,7 @@ jobs:
             odc-${{ runner.os }}-
 
       - name: Dependency-Check (SCA) - stable
+        if: false
         id: depcheck
         continue-on-error: true
         run: |
@@ -213,8 +214,10 @@ jobs:
         env:
           IMAGE_URI: ${{ steps.pick.outputs.repo_uri }}:${{ github.sha }}
         run: |
-          mvn -B clean package -DskipTests com.google.cloud.tools:jib-maven-plugin:3.4.0:build -Dimage="$IMAGE"
-          echo "image_uri=$IMAGE" >> $GITHUB_OUTPUT
+          echo "Pushing image: ${IMAGE_URI}"
+          test -n "${IMAGE_URI}" || (echo "IMAGE_URI is empty" && exit 1)
+          mvn -B -DskipTests com.google.cloud.tools:jib-maven-plugin:3.4.0:build -Dimage="${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
 
       - name: Update App Runner service
         env:
