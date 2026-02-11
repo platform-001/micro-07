@@ -148,28 +148,57 @@ jobs:
               f.write(f"build_status={status}\n")
           PY
       # 8) Update Port (branch entity)
-      - name: Update Port (branch) - metrics + image
+      - name: Update Port (branch) - metrics + image + OpenAPI
+        env:
+          PORT_WEBHOOK_URL: ${{ secrets.PORT_WEBHOOK_URL}}
+          SERVICE_CODE: ${{ github.event.repository.name }}
+          BRANCH: ${{ github.ref_name }}
+          BRANCH_IDENTIFIER: ${{ inputs.branch_identifier }}
+          PIPELINE_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
-          SERVICE_CODE="${GITHUB_REPOSITORY##*/}"
-          BRANCH="${GITHUB_REF_NAME}"
-          PIPELINE_URL="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          # Si ya construiste IMAGE_URI en el step meta, úsalo desde env o outputs.
-          # Aquí asumo que existe env.IMAGE_URI (como lo veníamos haciendo).
-          cat <<EOF > payload.json
-          {
-            "identifier": "$SERVICE_CODE-$BRANCH",
-            "blueprint": "branch",
-            "properties": {
-              "codigo_branch": "$BRANCH",
-              "build_status": "${{ steps.metrics.outputs.build_status }}",
-              "secretos_encontrados": ${{ steps.metrics.outputs.secretos }},
-              "vulnerabilidades_altas": ${{ steps.metrics.outputs.vulns_high_critical }},
-              "cobertura": ${{ steps.metrics.outputs.cobertura }},
-              "url_pipeline": "$PIPELINE_URL",
-              "image_uri": "$IMAGE_URI"
-            }
+          OPENAPI_PATH="api/openapi.yaml"
+
+          if [ ! -f "$OPENAPI_PATH" ]; then
+            echo "❌ No encuentro OpenAPI en $OPENAPI_PATH"
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json, pathlib, os
+
+          service = os.environ["SERVICE_CODE"]
+          branch = os.environ["BRANCH"]
+          pipeline = os.environ["PIPELINE_URL"]
+          image_uri = os.environ.get("IMAGE_URI", "")
+          branch_identifier = os.environ["BRANCH_IDENTIFIER"]
+
+          # outputs del step metrics
+          secretos = int("${{ steps.metrics.outputs.secretos }}")
+          vulns = int("${{ steps.metrics.outputs.vulns_high_critical }}")
+          cobertura = float("${{ steps.metrics.outputs.cobertura }}")
+          status = "${{ steps.metrics.outputs.build_status }}"
+
+          openapi = pathlib.Path("api/openapi.yaml").read_text(encoding="utf-8")
+
+          payload = {
+              "identifier": branch_identifier,
+              "blueprint": "branch",
+              "properties": {
+                  "codigo_branch": branch,
+                  "build_status": status,
+                  "secretos_encontrados": secretos,
+                  "vulnerabilidades_altas": vulns,
+                  "cobertura": cobertura,
+                  "url_pipeline": pipeline,
+                  "image_uri": image_uri,
+                  "open_api": openapi
+              }
           }
-          EOF
+
+          with open("payload.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f)
+          PY
+
           curl -sS -X POST "$PORT_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d @payload.json
