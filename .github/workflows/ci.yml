@@ -251,7 +251,7 @@ jobs:
 
           import glob, csv
 
-          def jacoco_markdown(limit=10):
+          def jacoco_markdown(limit: int = 10) -> str:
                   candidates = glob.glob("**/target/site/jacoco/jacoco.csv", recursive=True)
                   if not candidates:
                       return "### Cobertura (JaCoCo)\n_No se encontró jacoco.csv (verifica que `mvn test` genere JaCoCo)._"
