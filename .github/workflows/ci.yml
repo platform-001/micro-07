@@ -244,6 +244,49 @@ jobs:
                   md.append(f"\n_Mostrando top {limit}. Total: {len(rows)}._")
 
               return "\n".join(md)
+          
+              import glob, csv
+
+          def jacoco_markdown(limit=10):
+                  candidates = glob.glob("**/target/site/jacoco/jacoco.csv", recursive=True)
+                  if not candidates:
+                      return "### Cobertura (JaCoCo)\n_No se encontró jacoco.csv (verifica que `mvn test` genere JaCoCo)._"
+
+                  p = candidates[0]
+                  rows = []
+                  missed = covered = 0
+
+                  with open(p, newline="", encoding="utf-8") as f:
+                      reader = csv.DictReader(f)
+                      for r in reader:
+                          m = int(r.get("INSTRUCTION_MISSED", 0) or 0)
+                          c = int(r.get("INSTRUCTION_COVERED", 0) or 0)
+                          missed += m
+                          covered += c
+
+                          pkg = r.get("PACKAGE", "")
+                          cls = r.get("CLASS", "")
+                          denom = m + c
+                          pct = (c / denom * 100.0) if denom else 0.0
+                          rows.append((pct, pkg, cls, m, c))
+
+                  total = round((covered/(missed+covered))*100, 2) if (missed+covered) else 0.0
+                  rows.sort(key=lambda x: x[0])  # peor cobertura primero
+
+                  md = []
+                  md.append(f"### Cobertura (JaCoCo)\n**Total instrucciones:** {total}%")
+                  md.append("")
+                  md.append(f"**Top {min(limit, len(rows))} clases con menor cobertura (instrucciones):**")
+                  md.append("")
+                  md.append("| Cobertura | Paquete | Clase | Missed | Covered |")
+                  md.append("|---:|---|---|---:|---:|")
+
+                  for pct, pkg, cls, m, c in rows[:limit]:
+                      md.append(f"| {pct:.2f}% | `{pkg}` | `{cls}` | {m} | {c} |")
+
+                  return "\n".join(md)
+
+          quality_findings = jacoco_markdown(limit=10)
 
           security_findings = trivy_findings_md("trivy-image.json", limit=15)
 
@@ -259,7 +302,8 @@ jobs:
                   "url_pipeline": pipeline,
                   "image_uri": image_uri,
                   "open_api": openapi,
-                  "security_findings": security_findings
+                  "security_findings": security_findings,
+                  quality_findings = jacoco_markdown(limit=10)
               }
           }
 
