@@ -186,7 +186,6 @@ jobs:
 
           python - <<'PY'
           import json, pathlib, os
-
           service = os.environ["SERVICE_CODE"]
           branch = os.environ["BRANCH"]
           pipeline = os.environ["PIPELINE_URL"]
@@ -200,52 +199,59 @@ jobs:
 
           openapi = pathlib.Path("api/openapi.yaml").read_text(encoding="utf-8")
 
-          # ---- Security Findings (Trivy image json -> markdown) ----
-          def trivy_findings_md(path: str, limit: int = 15) -> str:
-              import os as _os
-              if not _os.path.exists(path):
-                  return "### Vulnerabilidades (Trivy)\n_No hay reporte Trivy de imagen disponible._"
-
+          # ---------- Parse Trivy JSON (Image) ----------
+          def load_trivy(path: str):
+              if not os.path.exists(path):
+                  return {}
               try:
-                  data = json.load(open(path, "r", encoding="utf-8"))
+                  with open(path, "r", encoding="utf-8") as f:
+                      return json.load(f)
               except Exception:
-                  return "### Vulnerabilidades (Trivy)\n_No se pudo leer el reporte Trivy._"
+                  return {}
 
-              rows = []
-              for r in data.get("Results", []) or []:
+          def extract_findings(trivy_data, limit: int = 50):
+              findings = []
+              results = trivy_data.get("Results", []) or []
+              for r in results:
+                  target = r.get("Target", "")
                   for v in (r.get("Vulnerabilities") or []):
                       sev = (v.get("Severity") or "").upper()
                       if sev not in ("HIGH", "CRITICAL"):
                           continue
-                      rows.append({
-                          "Severity": sev,
-                          "VulnerabilityID": v.get("VulnerabilityID",""),
-                          "PkgName": v.get("PkgName",""),
-                          "InstalledVersion": v.get("InstalledVersion",""),
-                          "FixedVersion": v.get("FixedVersion","") or "-",
+                      findings.append({
+                          "severity": sev,
+                          "id": v.get("VulnerabilityID", ""),
+                          "package": v.get("PkgName", ""),
+                          "installed": v.get("InstalledVersion", ""),
+                          "fixed": v.get("FixedVersion", "") or "-",
+                          "target": target
                       })
 
               order = {"CRITICAL": 0, "HIGH": 1}
-              rows.sort(key=lambda x: (order.get(x["Severity"], 9), x["VulnerabilityID"], x["PkgName"]))
+              findings.sort(key=lambda x: (order.get(x["severity"], 9), x["id"], x["package"]))
+              return findings[:limit]
 
+          def findings_markdown(findings, limit: int = 15):
               md = []
-              md.append(f"### Vulnerabilidades (Trivy) – HIGH/CRITICAL: *{len(rows)}*")
-              if not rows:
+              md.append(f"### Vulnerabilidades (Trivy) – HIGH/CRITICAL: **{len(findings)}**")
+              if not findings:
                   md.append("✅ No se detectaron vulnerabilidades HIGH/CRITICAL.")
                   return "\n".join(md)
 
               md.append("")
               md.append("| Severidad | ID | Paquete | Instalada | Fix |")
               md.append("|---|---|---|---|---|")
-              for item in rows[:limit]:
-                  md.append(f"| {item['Severity']} | {item['VulnerabilityID']} | ⁠ {item['PkgName']} ⁠ | ⁠ {item['InstalledVersion']} ⁠ | ⁠ {item['FixedVersion']} ⁠ |")
-
-              if len(rows) > limit:
-                  md.append(f"\n_Mostrando top {limit}. Total: {len(rows)}._")
-
+              for item in findings[:limit]:
+                  md.append(f"| {item['severity']} | {item['id']} | `{item['package']}` | `{item['installed']}` | `{item['fixed']}` |")
+              if len(findings) > limit:
+                  md.append(f"\n_Mostrando top {limit}. Total en JSON: {len(findings)}._")
               return "\n".join(md)
 
-          security_findings = trivy_findings_md("trivy-image.json", limit=15)
+          trivy = load_trivy("trivy-image.json")
+          findings = extract_findings(trivy, limit=50)
+
+          security_findings_json = json.dumps(findings, ensure_ascii=False)
+          security_findings_md = findings_markdown(findings, limit=15)
 
           payload = {
               "identifier": branch_identifier,
@@ -259,7 +265,8 @@ jobs:
                   "url_pipeline": pipeline,
                   "image_uri": image_uri,
                   "open_api": openapi,
-                  "security_findings": security_findings
+                  "security_findings": security_findings_md,
+                  "security_findings_json": security_findings_json
               }
           }
 
