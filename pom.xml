@@ -1,7 +1,13 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.8</version>
+    <relativePath />
+  </parent>
 
   <version>0.1.0-SNAPSHOT</version>
 
@@ -9,15 +15,15 @@
   <artifactId>micro-07</artifactId>
 
 
-
-
-
-
   <properties>
     <java.version>21</java.version>
     <spring-boot.version>3.2.0</spring-boot.version>
     <openapi.generator.version>7.6.0</openapi.generator.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
   </properties>
+
 
   <dependencyManagement>
     <dependencies>
@@ -59,7 +65,7 @@
       <scope>test</scope>
     </dependency>
 
-        <!-- new dependency-->
+    <!-- new dependency-->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
@@ -83,7 +89,9 @@
           <execution>
             <id>generate-openapi</id>
             <phase>generate-sources</phase>
-            <goals><goal>generate</goal></goals>
+            <goals>
+              <goal>generate</goal>
+            </goals>
             <configuration>
               <inputSpec>${project.basedir}/api/openapi.yaml</inputSpec>
               <generatorName>spring</generatorName>
@@ -118,7 +126,9 @@
           <execution>
             <id>add-generated</id>
             <phase>generate-sources</phase>
-            <goals><goal>add-source</goal></goals>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
             <configuration>
               <sources>
                 <source>${project.build.directory}/generated/src/main/java</source>
@@ -143,14 +153,11 @@
       <plugin>
         <groupId>com.google.cloud.tools</groupId>
         <artifactId>jib-maven-plugin</artifactId>
-        <version>LATEST_JIB_VERSION</version> <!-- Use the latest version from Maven Central -->
+        <version>3.4.3</version> <!-- Use the latest version from Maven Central -->
         <configuration>
           <from>
             <image>eclipse-temurin:21-jre</image> <!-- Specify a Java 21 compatible base image -->
           </from>
-          <to>
-            <image>your-registry-url/your-app-image-name:tag</image>
-          </to>
         </configuration>
       </plugin>
     </plugins>
