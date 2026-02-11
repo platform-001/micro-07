@@ -2,7 +2,12 @@ name: CI Branch - Security + Quality + Build Image + Port
 on:
   push:
     branches: ["**"]
-  workflow_dispatch: {}
+  workflow_dispatch: 
+    inputs:
+      aws-region:
+        description: "us-east-1"
+        required: true
+        default: "us-east-1"
 jobs:
   ci:
     runs-on: ubuntu-latest
