@@ -2,12 +2,15 @@ name: CI Branch - Security + Quality + Build Image + Port
 on:
   workflow_dispatch: 
     inputs:
-      aws-region:
+      aws_region:
         description: "us-east-1"
         required: true
         default: "us-east-1"
       repository_url:
         description: "123.dkr.ecr.us-east-1...."
+        required: true
+      branch_identifier:
+        description: "identifier of entitie Port"
         required: true
 jobs:
   ci:
@@ -16,7 +19,7 @@ jobs:
       id-token: write
       contents: read
     env:
-      AWS_REGION: ${{ inputs.aws-region }}
+      AWS_REGION: ${{ inputs.aws_region }}
       ECR_REPO_URL: ${{ inputs.repository_url }}
       PORT_WEBHOOK_URL: ${{ secrets.PORT_WEBHOOK_URL }}
     steps:
@@ -66,7 +69,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ inputs.aws_region }}
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
       # 5) Build & push image (Jib)
@@ -151,7 +154,7 @@ jobs:
           CODIGO_BRANCH="${SERVICE_CODE}:${GITHUB_REF_NAME}"
           payload=$(cat <<JSON
           {
-            "identifier": "${CODIGO_BRANCH}",
+            "identifier": "${{ inputs.branch_identifier }}",
             "title": "${CODIGO_BRANCH}",
             "blueprint": "branch",
             "properties": {
