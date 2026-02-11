@@ -150,22 +150,21 @@ jobs:
       # 8) Update Port (branch entity)
       - name: Update Port (branch)
         run: |
-          SERVICE_CODE="${GITHUB_REPOSITORY#*/}"
-          CODIGO_BRANCH="${SERVICE_CODE}:${GITHUB_REF_NAME}"
-          payload=$(cat <<JSON
+          SERVICE_CODE="${GITHUB_REPOSITORY##*/}"
+          BRANCH="${GITHUB_REF_NAME}"
+          echo "Service: $SERVICE_CODE"
+          echo "Branch: $BRANCH"
+          cat <<EOF > payload.json
           {
-            "identifier": "${{ inputs.branch_identifier }}",
-            "title": "${CODIGO_BRANCH}",
+            "identifier": "$SERVICE_CODE-$BRANCH",
             "blueprint": "branch",
             "properties": {
-              "codigo_branch": "${CODIGO_BRANCH}",
-              "build_status": "${{ steps.metrics.outputs.build_status }}",
-              "vulnerabilidades_altas": ${{ steps.metrics.outputs.vulns_high_critical }},
-              "secretos_encontrados": ${{ steps.metrics.outputs.secretos }},
-              "cobertura": ${{ steps.metrics.outputs.cobertura }},
-              "url_pipeline": "${PIPELINE_URL}"
+              "codigo_branch": "$BRANCH",
+              "build_status": "Desplegado",
+              "url_pipeline": "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             }
           }
-          JSON
-          )
-          curl -sS -X POST "$PORT_WEBHOOK_URL
+          EOF
+          curl -X POST https://ingest.getport.io/myywdQdDaB77uHyi \
+            -H "Content-Type: application/json" \
+            -d @payload.json
