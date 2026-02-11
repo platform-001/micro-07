@@ -245,7 +245,11 @@ jobs:
 
               return "\n".join(md)
           
-              import glob, csv
+             
+
+          security_findings = trivy_findings_md("trivy-image.json", limit=15)
+
+          import glob, csv
 
           def jacoco_markdown(limit=10):
                   candidates = glob.glob("**/target/site/jacoco/jacoco.csv", recursive=True)
@@ -287,8 +291,6 @@ jobs:
                   return "\n".join(md)
 
           quality_findings = jacoco_markdown(limit=10)
-
-          security_findings = trivy_findings_md("trivy-image.json", limit=15)
 
           payload = {
               "identifier": branch_identifier,
