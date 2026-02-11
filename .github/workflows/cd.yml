@@ -1,0 +1,113 @@
+name: CD - Build, Push (ECR) + Deploy (App Runner) + Update Port
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch: {}
+
+jobs:
+  cd:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPO_URL: ${{ vars.ECR_REPO_URL }}
+      PORT_WEBHOOK_URL: https://ingest.getport.io/myywdQdDaB77uHyi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEPLOY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Compute image tag (branch-safe)
+        id: meta
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          BRANCH_SLUG="$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g')"
+          SHA7="${GITHUB_SHA::7}"
+          TAG="${BRANCH_SLUG}-${SHA7}"
+          IMAGE_URI="${ECR_REPO_URL}:${TAG}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "pipeline_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_OUTPUT
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+
+      - name: Build (compile)
+        run: mvn -B -DskipTests clean compile
+
+      - name: Build & push image (Jib)
+        run: |
+          mvn -B -DskipTests jib:build -Dimage="${IMAGE_URI}"
+
+      - name: Resolve App Runner ARN
+        id: apprunner
+        run: |
+          SERVICE_NAME="${GITHUB_REPOSITORY##*/}"
+          echo "Looking for App Runner service: $SERVICE_NAME"
+          ARN=$(aws apprunner list-services \
+            --region "$AWS_REGION" \
+            --query "ServiceSummaryList[?ServiceName=='$SERVICE_NAME'].ServiceArn" \
+            --output text)
+          if [ -z "$ARN" ] || [ "$ARN" = "None" ]; then
+            echo "❌ No App Runner service found with name: $SERVICE_NAME"
+            exit 1
+          fi
+          echo "service_arn=$ARN" >> $GITHUB_OUTPUT
+          echo "Found ARN: $ARN"
+
+      - name: Deploy to App Runner (by tag)
+        run: |
+          aws apprunner update-service \
+            --service-arn "${{ steps.apprunner.outputs.service_arn }}" \
+            --region "$AWS_REGION" \
+            --source-configuration "ImageRepository={ImageIdentifier=${{ steps.meta.outputs.image_uri }},ImageRepositoryType=ECR,ImageConfiguration={Port=8080}}"
+
+      - name: Get App Runner URL
+        id: url
+        run: |
+          URL=$(aws apprunner describe-service \
+            --region "$AWS_REGION" \
+            --service-arn "${{ steps.apprunner.outputs.service_arn }}" \
+            --query "Service.ServiceUrl" \
+            --output text)
+          echo "service_url=$URL" >> $GITHUB_OUTPUT
+          echo "Service URL: $URL"
+
+      - name: Update Port (branch)
+        run: |
+          SERVICE_CODE="${GITHUB_REPOSITORY##*/}"
+          BRANCH="${{ steps.meta.outputs.branch }}"
+          cat <<EOF > payload.json
+          {
+            "identifier": "$SERVICE_CODE-$BRANCH",
+            "blueprint": "branch",
+            "properties": {
+              "codigo_branch": "$BRANCH",
+              "build_status": "Desplegado",
+              "url_pipeline": "${{ steps.meta.outputs.pipeline_url }}",
+              "image_uri": "${{ steps.meta.outputs.image_uri }}",
+              "url_servicio": "${{ steps.url.outputs.service_url }}"
+            }
+          }
+          EOF
+          curl -sS -X POST "$PORT_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @payload.json

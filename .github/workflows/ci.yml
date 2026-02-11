@@ -148,23 +148,28 @@ jobs:
               f.write(f"build_status={status}\n")
           PY
       # 8) Update Port (branch entity)
-      - name: Update Port (branch)
+      - name: Update Port (branch) - metrics + image
         run: |
           SERVICE_CODE="${GITHUB_REPOSITORY##*/}"
           BRANCH="${GITHUB_REF_NAME}"
-          echo "Service: $SERVICE_CODE"
-          echo "Branch: $BRANCH"
+          PIPELINE_URL="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # Si ya construiste IMAGE_URI en el step meta, úsalo desde env o outputs.
+          # Aquí asumo que existe env.IMAGE_URI (como lo veníamos haciendo).
           cat <<EOF > payload.json
           {
             "identifier": "$SERVICE_CODE-$BRANCH",
             "blueprint": "branch",
             "properties": {
               "codigo_branch": "$BRANCH",
-              "build_status": "Desplegado",
-              "url_pipeline": "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              "build_status": "${{ steps.metrics.outputs.build_status }}",
+              "secretos_encontrados": ${{ steps.metrics.outputs.secretos }},
+              "vulnerabilidades_altas": ${{ steps.metrics.outputs.vulns_high_critical }},
+              "cobertura": ${{ steps.metrics.outputs.cobertura }},
+              "url_pipeline": "$PIPELINE_URL",
+              "image_uri": "$IMAGE_URI"
             }
           }
           EOF
-          curl -X POST https://ingest.getport.io/myywdQdDaB77uHyi \
+          curl -sS -X POST "$PORT_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d @payload.json
