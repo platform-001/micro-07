@@ -185,6 +185,7 @@ jobs:
           fi
 
           python - <<'PY'
+
           import json, pathlib, os
           import glob, csv
 
@@ -208,7 +209,8 @@ jobs:
                   return "### Vulnerabilidades (Trivy)\n_No hay reporte Trivy de imagen disponible._"
 
               try:
-                  data = json.load(open(path, "r", encoding="utf-8"))
+                  with open(path, "r", encoding="utf-8") as f:
+                      data = json.load(f)
               except Exception:
                   return "### Vulnerabilidades (Trivy)\n_No se pudo leer el reporte Trivy._"
 
@@ -229,8 +231,7 @@ jobs:
               order = {"CRITICAL": 0, "HIGH": 1}
               rows.sort(key=lambda x: (order.get(x["Severity"], 9), x["VulnerabilityID"], x["PkgName"]))
 
-              md = []
-              md.append(f"### Vulnerabilidades (Trivy) – HIGH/CRITICAL: *{len(rows)}*")
+              md = [f"### Vulnerabilidades (Trivy) – HIGH/CRITICAL: *{len(rows)}*"]
               if not rows:
                   md.append("✅ No se detectaron vulnerabilidades HIGH/CRITICAL.")
                   return "\n".join(md)
@@ -239,51 +240,48 @@ jobs:
               md.append("| Severidad | ID | Paquete | Instalada | Fix |")
               md.append("|---|---|---|---|---|")
               for item in rows[:limit]:
-                  md.append(f"| {item['Severity']} | {item['VulnerabilityID']} | ⁠ {item['PkgName']} ⁠ | ⁠ {item['InstalledVersion']} ⁠ | ⁠ {item['FixedVersion']} ⁠ |")
+                  md.append(f"| {item['Severity']} | {item['VulnerabilityID']} | {item['PkgName']} | {item['InstalledVersion']} | {item['FixedVersion']} |")
 
               if len(rows) > limit:
                   md.append(f"\n_Mostrando top {limit}. Total: {len(rows)}._")
 
               return "\n".join(md)
 
-            def jacoco_markdown(limit: int = 10) -> str:
-                  candidates = glob.glob("**/target/site/jacoco/jacoco.csv", recursive=True)
-                  if not candidates:
-                      return "### Cobertura (JaCoCo)\n_No se encontró jacoco.csv (verifica que `mvn test` genere JaCoCo)._"
+          def jacoco_markdown(limit: int = 10) -> str:
+              candidates = glob.glob("**/target/site/jacoco/jacoco.csv", recursive=True)
+              if not candidates:
+                  return "### Cobertura (JaCoCo)\n_No se encontró jacoco.csv._"
 
-                  p = candidates[0]
-                  rows = []
-                  missed = covered = 0
+              p = candidates[0]
+              rows = []
+              missed = covered = 0
 
-                  with open(p, newline="", encoding="utf-8") as f:
-                      reader = csv.DictReader(f)
-                      for r in reader:
-                          m = int(r.get("INSTRUCTION_MISSED", 0) or 0)
-                          c = int(r.get("INSTRUCTION_COVERED", 0) or 0)
-                          missed += m
-                          covered += c
+              with open(p, newline="", encoding="utf-8") as f:
+                  reader = csv.DictReader(f)
+                  for r in reader:
+                      m = int(r.get("INSTRUCTION_MISSED", 0) or 0)
+                      c = int(r.get("INSTRUCTION_COVERED", 0) or 0)
+                      missed += m
+                      covered += c
+                      pkg = r.get("PACKAGE", "")
+                      cls = r.get("CLASS", "")
+                      denom = m + c
+                      pct = (c / denom * 100.0) if denom else 0.0
+                      rows.append((pct, pkg, cls, m, c))
 
-                          pkg = r.get("PACKAGE", "")
-                          cls = r.get("CLASS", "")
-                          denom = m + c
-                          pct = (c / denom * 100.0) if denom else 0.0
-                          rows.append((pct, pkg, cls, m, c))
+              total = round((covered/(missed+covered))*100, 2) if (missed+covered) else 0.0
+              rows.sort(key=lambda x: x[0])
 
-                  total = round((covered/(missed+covered))*100, 2) if (missed+covered) else 0.0
-                  rows.sort(key=lambda x: x[0])  # peor cobertura primero
+              md = [f"### Cobertura (JaCoCo)\n**Total instrucciones:** {total}%", ""]
+              md.append(f"**Top {min(limit, len(rows))} clases con menor cobertura:**")
+              md.append("")
+              md.append("| Cobertura | Paquete | Clase | Missed | Covered |")
+              md.append("|---:|---|---|---:|---:|")
 
-                  md = []
-                  md.append(f"### Cobertura (JaCoCo)\n**Total instrucciones:** {total}%")
-                  md.append("")
-                  md.append(f"**Top {min(limit, len(rows))} clases con menor cobertura (instrucciones):**")
-                  md.append("")
-                  md.append("| Cobertura | Paquete | Clase | Missed | Covered |")
-                  md.append("|---:|---|---|---:|---:|")
+              for pct, pkg, cls, m, c in rows[:limit]:
+                  md.append(f"| {pct:.2f}% | `{pkg}` | `{cls}` | {m} | {c} |")
 
-                  for pct, pkg, cls, m, c in rows[:limit]:
-                      md.append(f"| {pct:.2f}% | `{pkg}` | `{cls}` | {m} | {c} |")
-
-                  return "\n".join(md)
+              return "\n".join(md)
 
           quality_findings = jacoco_markdown(limit=10)
           security_findings = trivy_findings_md("trivy-image.json", limit=15)
@@ -301,13 +299,14 @@ jobs:
                   "image_uri": image_uri,
                   "open_api": openapi,
                   "security_findings": security_findings,
-                  quality_findings = jacoco_markdown(limit=10)
+                  "quality_findings": quality_findings
               }
           }
 
           with open("payload.json", "w", encoding="utf-8") as f:
               json.dump(payload, f, ensure_ascii=False)
           PY
+       
 
           curl -sS -X POST "$PORT_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
